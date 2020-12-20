@@ -45,7 +45,12 @@ def parse_args():
     return args
 
 
-def getIPs(afs):
+def updateIPs(config, afs):
+    for ip in get_ip_addresses(afs):
+        commit_record(ip, config)
+
+
+def get_ip_addresses(afs):
 
     af_config = {
         "ipv4": {
@@ -77,7 +82,7 @@ def getIPs(afs):
     return ret
 
 
-def commitRecord(ip, config):
+def commit_record(ip, config):
     stale_record_ids = []
     for c in config["cloudflare"]:
         subdomains = c["subdomains"]
@@ -152,11 +157,6 @@ def cf_api(endpoint, method, config, headers={}, data=False):
             method, "https://api.cloudflare.com/client/v4/" + endpoint, headers=headers, json=data)
 
     return response.json()
-
-
-def updateIPs(config, afs):
-    for ip in getIPs(afs):
-        commitRecord(ip, config)
 
 
 if __name__ == "__main__":
