@@ -4,15 +4,15 @@ import time
 
 
 def main():
-    path = os.getcwd() + "/"
+    path = os.getcwd()
     version = float(str(sys.version_info[0]) + "." + str(sys.version_info[1]))
 
-    if(version < 3.5):
-        raise Exception("This script requires Python 3.5+")
+    if(version < 3.6):
+        raise Exception("This script requires Python 3.6+")
 
     args = parse_args()
 
-    with open(path + "config.json") as config_file:
+    with open(f"{path}/config.json") as config_file:
         config = json.loads(config_file.read())
 
     afs = []
@@ -33,14 +33,16 @@ def main():
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(description=('Update Cloudflare dynamic '
-        'DNS with this host\'s public IP addresses. Update both IPv4 and IPv6 '
-        'if no address family is specified.'))
+    parser = argparse.ArgumentParser(description=("Update Cloudflare dynamic "
+        "DNS with this host's public IP addresses. Update both IPv4 and IPv6 "
+        "if no address family is specified."))
 
-    parser.add_argument('--repeat', action='store_true',
-        help='Update every 10 minutes')
-    parser.add_argument('-4', dest='ipv4', action='store_true', help='Update IPv4 address')
-    parser.add_argument('-6', dest='ipv6', action='store_true', help='Update IPv6 address')
+    parser.add_argument("--repeat", action="store_true",
+        help="Update every 10 minutes")
+    parser.add_argument(
+        "-4", dest="ipv4", action="store_true", help="Update IPv4 address")
+    parser.add_argument(
+        "-6", dest="ipv6", action="store_true", help="Update IPv6 address")
     args = parser.parse_args()
     return args
 
@@ -71,7 +73,7 @@ def get_ip_addresses(afs):
             result = requests.get(config['checker']).text.splitlines()
             ip_address = dict(s.split("=") for s in result)["ip"]
         except requests.exceptions.RequestException:
-            print("Warning: could not get {} address".format(af))
+            print("Warning: could not get {af} address")
         else:
 
             ret.append({
@@ -86,7 +88,7 @@ def commit_record(ip, config):
     stale_record_ids = []
     for c in config["cloudflare"]:
         subdomains = c["subdomains"]
-        response = cf_api("zones/" + c['zone_id'], "GET", c)
+        response = cf_api(f"zones/{c['zone_id']}", "GET", c)
         base_domain_name = response["result"]["name"]
         ttl = 120
         if "ttl" in c:
@@ -102,11 +104,13 @@ def commit_record(ip, config):
                 "ttl": ttl
             }
             list = cf_api(
-                "zones/" + c['zone_id'] + "/dns_records?per_page=100&type=" + ip["type"], "GET", c)
+                f"zones/{c['zone_id']}/dns_records?per_page=100&type={ip['type']}",
+                "GET", c
+            )
             
             full_subdomain = base_domain_name
             if subdomain:
-                full_subdomain = subdomain + "." + full_subdomain
+                full_subdomain = f"{subdomain}.{full_subdomain}"
             
             dns_id = ""
             for r in list["result"]:
@@ -117,44 +121,52 @@ def commit_record(ip, config):
                             dns_id = r["id"]
                         else:
                             stale_record_ids.append(r["id"])
-            if(exists == False):
-                print("Adding new record " + str(record))
+            if not exists:
+                print(f"Adding new record {str(record)}")
                 response = cf_api(
-                    "zones/" + c['zone_id'] + "/dns_records", "POST", c, {}, record)
-            elif(dns_id != ""):
+                    f"zones/{c['zone_id']}/dns_records", "POST", c, {}, record
+                )
+            elif dns_id != "":
                 # Only update if the record content is different
-                print("Updating record " + str(record))
+                print("Updating record {}" + str(record))
                 response = cf_api(
-                    "zones/" + c['zone_id'] + "/dns_records/" + dns_id, "PUT", c, {}, record)
+                    f"zones/{c['zone_id']}/dns_records/{dns_id}",
+                    "PUT", c, {}, record
+                )
 
     # Delete duplicate, stale records
     for identifier in stale_record_ids:
-        print("Deleting stale record " + str(identifier))
+        print(f"Deleting stale record {str(identifier)}")
         response = cf_api(
-            "zones/" + c['zone_id'] + "/dns_records/" + identifier, "DELETE", c)
+            f"zones/{c['zone_id']}/dns_records/{identifier}", "DELETE", c
+        )
 
     return True
 
 
 def cf_api(endpoint, method, config, headers={}, data=False):
-    api_token = config['authentication']['api_token']
-    if api_token != '' and api_token != 'api_token_here':
+    api_token = config["authentication"]["api_token"]
+    if api_token != "" and api_token != "api_token_here":
         headers = {
             "Authorization": "Bearer " + api_token,
             **headers
         }
     else:
         headers = {
-            "X-Auth-Email": config['authentication']['api_key']['account_email'],
-            "X-Auth-Key": config['authentication']['api_key']['api_key'],        
+            "X-Auth-Email": config["authentication"]["api_key"]["account_email"],
+            "X-Auth-Key": config["authentication"]["api_key"]["api_key"],
         }
 
     if(data == False):
         response = requests.request(
-            method, "https://api.cloudflare.com/client/v4/" + endpoint, headers=headers)
+            method, f"https://api.cloudflare.com/client/v4/{endpoint}",
+            headers=headers
+        )
     else:
         response = requests.request(
-            method, "https://api.cloudflare.com/client/v4/" + endpoint, headers=headers, json=data)
+            method, f"https://api.cloudflare.com/client/v4/{endpoint}",
+            headers=headers, json=data
+        )
 
     return response.json()
 
