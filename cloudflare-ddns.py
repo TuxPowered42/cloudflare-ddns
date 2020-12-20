@@ -17,13 +17,11 @@ def main():
 
     if args.repeat:
         print("Updating A & AAAA records every 10 minutes")
+        delay = 10 # 10 minutes
         updateIPs(config)
-        delay = 10*60 # 10 minutes
-        next_time = time.time() + delay
         while True:
-            time.sleep(max(0, next_time - time.time()))
+            time.sleep(delay)
             updateIPs(config)
-            next_time += (time.time() - next_time) // delay * delay + delay
     else:
         updateIPs(config)
 
