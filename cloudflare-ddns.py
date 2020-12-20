@@ -15,60 +15,66 @@ def main():
     with open(path + "config.json") as config_file:
         config = json.loads(config_file.read())
 
+    afs = []
+    if args.ipv4 or not (args.ipv4 or args.ipv6):
+        afs.append('ipv4')
+    if args.ipv6 or not (args.ipv4 or args.ipv6):
+        afs.append('ipv6')
+
     if args.repeat:
         print("Updating A & AAAA records every 10 minutes")
-        delay = 10 # 10 minutes
-        updateIPs(config)
+        delay = 10*60 # 10 minutes
+        updateIPs(config, afs)
         while True:
             time.sleep(delay)
-            updateIPs(config)
+            updateIPs(config, afs)
     else:
-        updateIPs(config)
+        updateIPs(config, afs)
 
 
 def parse_args():
     parser = argparse.ArgumentParser(description=('Update Cloudflare dynamic '
-        'DNS with this host\'s public IP addresses.'))
+        'DNS with this host\'s public IP addresses. Update both IPv4 and IPv6 '
+        'if no address family is specified.'))
 
     parser.add_argument('--repeat', action='store_true',
         help='Update every 10 minutes')
+    parser.add_argument('-4', dest='ipv4', action='store_true', help='Update IPv4 address')
+    parser.add_argument('-6', dest='ipv6', action='store_true', help='Update IPv6 address')
     args = parser.parse_args()
     return args
 
-def getIPs():
-    a = ""
-    aaaa = ""
-    try:
-        a = requests.get("https://1.1.1.1/cdn-cgi/trace").text.split("\n")
-        a.pop()
-        a = dict(s.split("=") for s in a)["ip"]
-    except Exception:
-        print("Warning: IPv4 not detected.")
-    try:
-        aaaa = requests.get("https://[2606:4700:4700::1111]/cdn-cgi/trace").text.split("\n")
-        aaaa.pop()
-        aaaa = dict(s.split("=") for s in aaaa)["ip"]
-    except Exception:
-        print("Warning: IPv6 not detected.")
-    ips = []
 
-    if(a.find(".") > -1):
-        ips.append({
+def getIPs(afs):
+
+    af_config = {
+        "ipv4": {
+            "checker": "https://1.1.1.1/cdn-cgi/trace",
             "type": "A",
-            "ip": a
-        })
-    else:
-        print("Warning: IPv4 not detected.")
-
-    if(aaaa.find(":") > -1):
-        ips.append({
+        },
+        "ipv6": {
+            "checker": "https://[2606:4700:4700::1111]/cdn-cgi/trace",
             "type": "AAAA",
-            "ip": aaaa
-        })
-    else:
-        print("Warning: IPv6 not detected.")
+        },
+    }
 
-    return ips
+    ret = []
+
+    for af in afs:
+        config = af_config[af]
+        try:
+            result = requests.get(config['checker']).text.splitlines()
+            ip_address = dict(s.split("=") for s in result)["ip"]
+        except requests.exceptions.RequestException:
+            print("Warning: could not get {} address".format(af))
+        else:
+
+            ret.append({
+                "type": config["type"],
+                "ip_address": ip_address,
+            })
+
+    return ret
 
 
 def commitRecord(ip, config):
@@ -86,7 +92,7 @@ def commitRecord(ip, config):
             record = {
                 "type": ip["type"],
                 "name": subdomain,
-                "content": ip["ip"],
+                "content": ip["ip_address"],
                 "proxied": c["proxied"],
                 "ttl": ttl
             }
@@ -101,7 +107,7 @@ def commitRecord(ip, config):
             for r in list["result"]:
                 if (r["name"] == full_subdomain):
                     exists = True
-                    if (r["content"] != ip["ip"]):
+                    if (r["content"] != ip["ip_address"]):
                         if (dns_id == ""):
                             dns_id = r["id"]
                         else:
@@ -148,8 +154,8 @@ def cf_api(endpoint, method, config, headers={}, data=False):
     return response.json()
 
 
-def updateIPs(config):
-    for ip in getIPs():
+def updateIPs(config, afs):
+    for ip in getIPs(afs):
         commitRecord(ip, config)
 
 
