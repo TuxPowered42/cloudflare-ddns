@@ -1,14 +1,41 @@
+import argparse
 import requests, json, sys, os
 import time
 
-PATH = os.getcwd() + "/"
-version = float(str(sys.version_info[0]) + "." + str(sys.version_info[1]))
 
-if(version < 3.5):
-    raise Exception("This script requires Python 3.5+")
+def main():
+    path = os.getcwd() + "/"
+    version = float(str(sys.version_info[0]) + "." + str(sys.version_info[1]))
 
-with open(PATH + "config.json") as config_file:
-    config = json.loads(config_file.read())
+    if(version < 3.5):
+        raise Exception("This script requires Python 3.5+")
+
+    args = parse_args()
+
+    with open(path + "config.json") as config_file:
+        config = json.loads(config_file.read())
+
+    if args.repeat:
+        print("Updating A & AAAA records every 10 minutes")
+        updateIPs(config)
+        delay = 10*60 # 10 minutes
+        next_time = time.time() + delay
+        while True:
+            time.sleep(max(0, next_time - time.time()))
+            updateIPs(config)
+            next_time += (time.time() - next_time) // delay * delay + delay
+    else:
+        updateIPs(config)
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description=('Update Cloudflare dynamic '
+        'DNS with this host\'s public IP addresses.'))
+
+    parser.add_argument('--repeat', action='store_true',
+        help='Update every 10 minutes')
+    args = parser.parse_args()
+    return args
 
 def getIPs():
     a = ""
@@ -46,7 +73,7 @@ def getIPs():
     return ips
 
 
-def commitRecord(ip):
+def commitRecord(ip, config):
     stale_record_ids = []
     for c in config["cloudflare"]:
         subdomains = c["subdomains"]
@@ -122,21 +149,11 @@ def cf_api(endpoint, method, config, headers={}, data=False):
 
     return response.json()
 
-def updateIPs():
-    for ip in getIPs():
-        commitRecord(ip)
 
-if(len(sys.argv) > 1):
-    if(sys.argv[1] == "--repeat"):
-        print("Updating A & AAAA records every 10 minutes")
-        updateIPs()
-        delay = 10*60 # 10 minutes
-        next_time = time.time() + delay
-        while True:
-            time.sleep(max(0, next_time - time.time()))
-            updateIPs()
-            next_time += (time.time() - next_time) // delay * delay + delay
-    else:
-        print("Unrecognized parameter '" + sys.argv[1] + "'. Stopping now.")
-else:
-    updateIPs()
+def updateIPs(config):
+    for ip in getIPs():
+        commitRecord(ip, config)
+
+
+if __name__ == "__main__":
+    main()
