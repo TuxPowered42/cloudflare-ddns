@@ -4,15 +4,18 @@ import time
 
 
 def main():
-    path = os.getcwd()
     version = float(str(sys.version_info[0]) + "." + str(sys.version_info[1]))
 
     if(version < 3.6):
         raise Exception("This script requires Python 3.6+")
 
     args = parse_args()
+    if args.config:
+        config_path = args.config
+    else:
+        config_path = os.getcwd() + "/config.json"
 
-    with open(f"{path}/config.json") as config_file:
+    with open(config_path) as config_file:
         config = json.loads(config_file.read())
 
     afs = []
@@ -43,6 +46,8 @@ def parse_args():
         "-4", dest="ipv4", action="store_true", help="Update IPv4 address")
     parser.add_argument(
         "-6", dest="ipv6", action="store_true", help="Update IPv6 address")
+    parser.add_argument(
+        "--config", help="Config file location")
     args = parser.parse_args()
     return args
 
